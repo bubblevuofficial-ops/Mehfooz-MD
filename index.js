@@ -50,6 +50,30 @@ if (!fs.existsSync(SESSIONS_ROOT)) {
     } catch (e) {}
 })();
 
+// ─── FRIENDLY SERVER NUMBERING ───
+// The dashboard shows every board as "Server 1", "Server 2", etc. instead
+// of its long random session id. Numbers are assigned once, the first time
+// a session id is ever seen, and then remembered forever (even if that
+// board later disconnects) so numbers never get reused or reshuffled.
+const SERVER_LABELS_FILE = path.join(__dirname, 'server_labels.json');
+let serverLabels = { nextNumber: 1, map: {} };
+if (fs.existsSync(SERVER_LABELS_FILE)) {
+    try {
+        const saved = JSON.parse(fs.readFileSync(SERVER_LABELS_FILE, 'utf8'));
+        if (saved && saved.map) serverLabels = saved;
+    } catch (e) {}
+}
+function saveServerLabels() {
+    try { fs.writeFileSync(SERVER_LABELS_FILE, JSON.stringify(serverLabels, null, 2)); } catch (e) {}
+}
+function getServerNumber(sessionId) {
+    if (!serverLabels.map[sessionId]) {
+        serverLabels.map[sessionId] = serverLabels.nextNumber++;
+        saveServerLabels();
+    }
+    return serverLabels.map[sessionId];
+}
+
 // ─── COMMAND CATALOG (150 commands, categorized) ───
 // This catalog powers the "Commands Control" panel. Each command can be
 // enabled/disabled from the admin panel. Actual execution logic for each
@@ -255,6 +279,9 @@ let botSettings = {
     groupLinks: [
         'https://chat.whatsapp.com/F7U7754Jf1MAn5HWUPd56Q?s=cl&p=a&mlu=4&ilr=4'
     ],
+    socialYoutube: '',
+    socialInstagram: '',
+    socialTelegram: '',
     enabledCommands: {} // filled below with defaults (all true)
 };
 
@@ -352,11 +379,12 @@ function makeSessionId() {
 function listSessions() {
     return Object.values(sessions).map(s => ({
         id: s.id,
+        number: getServerNumber(s.id),
         status: s.status,
         connectedNumber: s.connectedNumber,
         connectedTime: s.connectedTime,
         startedAt: s.startedAt
-    }));
+    })).sort((a, b) => a.number - b.number);
 }
 
 function countOnlineSessions() {
@@ -548,8 +576,16 @@ const server = http.createServer(async (req, res) => {
         recordConsent(phoneNumber);
 
         try {
-            const id = makeSessionId();
+            // Reuse the chosen server slot if it exists and isn't already
+            // connected; otherwise (or if "new" was chosen) mint a fresh one.
+            const reuseId = query.sessionId && sessions[query.sessionId] && sessions[query.sessionId].status !== 'ONLINE'
+                ? query.sessionId : null;
+            const id = reuseId || makeSessionId();
             const dir = path.join(SESSIONS_ROOT, id);
+            if (reuseId) {
+                try { sessions[id].sock && sessions[id].sock.end && sessions[id].sock.end(); } catch (e) {}
+                try { if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {}
+            }
             fs.mkdirSync(dir, { recursive: true });
             const { state, saveCreds } = await useMultiFileAuthState(dir);
             const sockPair = makeWASocket({
@@ -787,311 +823,249 @@ const server = http.createServer(async (req, res) => {
         if (botState.qrString) {
             try {
                 const qrImg = await qrcode.toDataURL(botState.qrString);
-                qrDisplay = `<img src="${qrImg}" style="width:150px;height:150px;border-radius:8px;background:#fff;padding:6px;">`;
+                qrDisplay = `<img src="${qrImg}" style="width:170px;height:170px;border-radius:8px;background:#fff;padding:6px;">`;
             } catch(e) {
                 qrDisplay = `<div style="color:#f87171;font-size:11px;">QR Generation Error</div>`;
             }
         } else {
-            qrDisplay = `<div style="color:#38bdf8;font-size:11px;text-align:center;padding:40px 0;">Preparing QR Code...<br><a href="/refresh-qr" style="color:#00ff88;text-decoration:underline;margin-top:6px;display:inline-block;">[Reset QR]</a></div>`;
+            qrDisplay = `<div style="color:#38bdf8;font-size:11px;text-align:center;padding:30px 10px;">Preparing QR Code...<br><a href="/refresh-qr?id=new" style="color:#00ff88;text-decoration:underline;margin-top:6px;display:inline-block;">[Reset QR]</a></div>`;
         }
 
-        const uptimeSec = Math.floor(process.uptime());
-        const days = Math.floor(uptimeSec / (3600 * 24));
-        const hours = Math.floor((uptimeSec % (3600 * 24)) / 3600);
-        const mins = Math.floor((uptimeSec % 3600) / 60);
-        const secs = uptimeSec % 60;
-        const uptimeStr = days > 0 ? `${days}d ${hours}h ${mins}m` : `${hours}h ${mins}m ${secs}s`;
-        const totalMemGB = (os.totalmem() / 1024 / 1024 / 1024).toFixed(1);
-        const usedMemMB = ((os.totalmem() - os.freemem()) / 1024 / 1024 / 1024).toFixed(0);
-        const ramPercent = Math.min(100, Math.round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100));
-        const cpuPercent = Math.min(100, Math.round((os.loadavg()[0] / os.cpus().length) * 100)) || 0;
-        const nowStr = new Date().toLocaleString('en-US', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true });
-        const statusColor = botState.status === 'ONLINE' ? '#00ff88' : '#f87171';
+        const boards = listSessions();
+        const ownerDisplay = botSettings.ownerNumber ? '+' + botSettings.ownerNumber : 'Not set';
+        const waChannelLink = (botSettings.channelLinks && botSettings.channelLinks[0]) || '#';
 
-        // Real (non-fake) numbers — same source the admin panel uses, so the
-        // two never disagree.
-        const dRealUsers = getRealUserCount();
-        const dRealGroups = await getRealGroupCount();
-        const dRealMessages = messageStats.total;
-        const dRealOnline = getOnlineUserCount();
+        const serverOptions = [
+            `<option value="new">+ New Server (auto)</option>`,
+            ...boards.map(b => `<option value="${b.id}">Server ${b.number} &mdash; ${b.status === 'ONLINE' ? b.connectedNumber : (b.status === 'PAIRING' ? 'Pairing...' : 'Not Paired')}</option>`)
+        ].join('');
+
+        const boardsListHtml = boards.length === 0
+            ? `<div class="up-board-row"><span class="up-ic">&#128241;</span><span><b>No boards yet</b><div class="up-sub">Pair one above to see it here</div></span></div>`
+            : boards.map(b => `<div class="up-board-row"><span class="up-ic">&#128241;</span><span><b>Server ${b.number}</b><div class="up-sub">${b.status === 'ONLINE' ? b.connectedNumber : b.status}</div></span><a href="/api/logout-session?id=${encodeURIComponent(b.id)}" class="up-check" style="color:${b.status === 'ONLINE' ? '#00ff88' : '#f87171'};" title="Disconnect this board" onclick="return confirm('Disconnect this board? It will be removed permanently.');">${b.status === 'ONLINE' ? '&#10003;' : '&#10005;'}</a></div>`).join('');
 
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        const __dashboardHtml = `
+        const __userPanelHtml = `
             <!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>${botSettings.botName} // Cyber Dashboard</title>
+                <title>${botSettings.botName} // Pairing Panel</title>
                 <style>
                     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-                    body { background-color: #030814; color: #e2e8f0; display: flex; min-height: 100vh; }
-                    a { text-decoration: none; }
-                    .sidebar { width: 220px; background: rgba(6,13,26,0.98); border-right: 1px solid rgba(0,255,136,0.15); display: flex; flex-direction: column; justify-content: space-between; padding: 16px 10px; position: sticky; top: 0; height: 100vh; }
-                    .brand { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:900; color:#fff; margin-bottom:18px; padding:0 6px; }
-                    .brand-icon { width:32px; height:32px; border-radius:50%; background:radial-gradient(circle,#0a3325,#030814); border:1px solid #00ff88; display:flex; align-items:center; justify-content:center; color:#00ff88; font-size:15px; box-shadow:0 0 10px rgba(0,255,136,0.4); }
-                    .menu-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; color: #94a3b8; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; margin-bottom: 3px; border-left: 3px solid transparent; transition: 0.2s; }
-                    .menu-item.active, .menu-item:hover { background: linear-gradient(90deg, rgba(0,255,136,0.15), transparent); color: #00ff88; border-left: 3px solid #00ff88; }
-                    .menu-icon { width:16px; text-align:center; }
-                    .side-footer { background: rgba(10,22,40,0.9); border:1px solid rgba(0,255,136,0.25); border-radius:8px; padding:10px; }
-                    .side-footer .name { font-size:10px; font-weight:bold; color:#00ff88; margin-bottom:4px; }
-                    .side-footer .tag { font-size:8px; color:#94a3b8; letter-spacing:1px; margin-bottom:6px; }
-                    .pulse-bars { display:flex; gap:2px; align-items:flex-end; height:14px; }
-                    .pulse-bars span { flex:1; background:#00ff88; opacity:0.6; border-radius:1px; animation: barpulse 1.2s infinite ease-in-out; }
-                    .pulse-bars span:nth-child(2){animation-delay:0.15s;height:60%}
-                    .pulse-bars span:nth-child(3){animation-delay:0.3s;height:100%}
-                    .pulse-bars span:nth-child(4){animation-delay:0.45s;height:40%}
-                    .pulse-bars span:nth-child(5){animation-delay:0.6s;height:80%}
-                    @keyframes barpulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
-                    .main-content { flex: 1; overflow-y: auto; background: radial-gradient(circle at top right, #0a192f 0%, #030814 65%); padding: 18px 24px; }
-                    .topbar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; border-bottom: 1px solid rgba(0,255,136,0.15); padding-bottom: 14px; }
-                    .topbar-left { display:flex; align-items:center; gap:12px; }
-                    .logo-circle { width:52px; height:52px; border-radius:50%; background:radial-gradient(circle,#0a3325,#030814); border:2px solid #00ff88; display:flex; align-items:center; justify-content:center; box-shadow:0 0 14px rgba(0,255,136,0.5); }
-                    .topbar-title h1 { font-size: 19px; color: #fff; font-weight: 900; letter-spacing: 0.5px; }
-                    .topbar-title p { font-size: 10px; color: #00ff88; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
-                    .status-badge { display:inline-flex; align-items:center; gap:6px; font-size:10px; color:${statusColor}; border:1px solid rgba(0,255,136,0.3); border-radius:14px; padding:3px 10px; margin-top:6px; }
-                    .topbar-right { display: flex; align-items: center; gap: 18px; }
-                    .datetime { text-align:right; font-size:11px; color:#94a3b8; }
-                    .datetime b { color:#fff; display:block; font-size:12px; }
-                    .admin-chip { display:flex; align-items:center; gap:8px; background:rgba(0,255,136,0.08); border:1px solid rgba(0,255,136,0.3); border-radius:20px; padding:5px 12px 5px 5px; }
-                    .admin-avatar { width:26px; height:26px; border-radius:50%; background:#0a192f; border:1px solid #00ff88; display:flex; align-items:center; justify-content:center; font-size:12px; }
-                    .admin-chip .role { font-size:9px; color:#94a3b8; }
-                    .admin-chip .name { font-size:11px; color:#fff; font-weight:600; }
-                    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
-                    .stat-box { background: rgba(10,22,40,0.8); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px; padding: 14px; }
-                    .stat-header { display: flex; align-items:center; gap:8px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing:0.5px; }
-                    .stat-icon { width:26px; height:26px; border-radius:50%; background:rgba(0,255,136,0.12); display:flex; align-items:center; justify-content:center; font-size:13px; }
-                    .stat-value { font-size: 22px; font-weight: 800; color: #fff; margin-top: 8px; }
-                    .stat-sub { font-size: 10px; color: #34d399; margin-top: 2px; }
-                    .card { background: rgba(10,22,40,0.8); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px; padding: 16px; }
-                    .card-title { font-size: 11px; font-weight: 700; color: #fff; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; text-transform: uppercase; letter-spacing:0.5px; }
-                    .card-title .muted { font-size:9px; color:#94a3b8; text-transform:none; }
-                    .grid-mid { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 14px; margin-bottom: 14px; }
-                    .radar-container { display: flex; align-items: center; justify-content: center; position: relative; height: 110px; }
-                    .radar-ring { position: absolute; width: 100px; height: 100px; border: 2px solid rgba(0,255,136,0.35); border-radius: 50%; animation: pulse-ring 2s infinite; }
-                    .radar-ring:nth-child(2) { width: 72px; height: 72px; animation-delay: 0.6s; }
-                    .whatsapp-icon { width: 46px; height: 46px; background: #00ff88; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px #00ff88; z-index: 2; }
-                    @keyframes pulse-ring { 0% { transform: scale(0.7); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
-                    .status-online-pill { display:inline-flex; align-items:center; gap:6px; background:rgba(0,255,136,0.1); border:1px solid #00ff88; color:#00ff88; font-size:11px; font-weight:700; padding:4px 14px; border-radius:16px; margin:8px 0; }
-                    .info-row { display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#94a3b8; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
-                    .info-row b { color:#fff; font-weight:600; }
-                    .mini-bar { width:60px; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden; }
-                    .mini-bar span { display:block; height:100%; background:#00ff88; }
-                    .term-box { background:#000; border:1px solid rgba(0,255,136,0.15); border-radius:6px; padding:6px 8px; font-size:9px; color:#34d399; font-family:monospace; margin-top:8px; }
-                    .profile-card { background: linear-gradient(135deg, rgba(6,30,30,0.9), rgba(3,8,20,0.95)); text-align: center; border: 1px solid rgba(0,255,136,0.35); }
-                    .avatar-circle { width: 66px; height: 66px; border-radius: 50%; border: 2px solid #00ff88; background: #0a192f; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 0 15px rgba(0,255,136,0.5); margin:0 auto 8px; }
-                    .dev-tags { display: flex; justify-content:center; gap: 6px; font-size: 8px; color: #00ff88; margin-top: 8px; font-weight: bold; letter-spacing: 1px; }
-                    .antifeat-banner { margin-top:12px; background:rgba(0,255,136,0.08); border:1px solid #00ff88; border-radius:10px; padding:10px; display:flex; align-items:center; gap:10px; }
-                    .antifeat-banner .shield { width:30px; height:30px; border-radius:50%; background:rgba(0,255,136,0.15); display:flex; align-items:center; justify-content:center; }
-                    .grid-bottom { display: grid; grid-template-columns: 1.3fr 1.3fr 1fr; gap: 14px; margin-bottom:14px; }
-                    .list-item { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:10px; }
-                    .list-item .ic { width:22px; height:22px; border-radius:50%; background:rgba(0,255,136,0.1); display:flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; }
-                    .list-item .txt b { color:#fff; }
-                    .list-item .txt .sub { color:#64748b; font-size:9px; }
-                    .list-item .time { margin-left:auto; color:#64748b; font-size:9px; white-space:nowrap; }
-                    .group-row { display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:10px; }
-                    .group-row .name { color:#fff; font-weight:600; }
-                    .group-row .sub { color:#64748b; font-size:9px; }
-                    .badge-active { font-size:8px; color:#00ff88; border:1px solid rgba(0,255,136,0.3); border-radius:8px; padding:2px 6px; }
-                    .session-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:10px; }
-                    .session-row .ic { width:18px; }
-                    .session-row .sub { color:#64748b; font-size:9px; }
-                    .check { color:#00ff88; margin-left:auto; }
-                    .qr-card { display:flex; flex-direction:column; align-items:center; }
-                    .qr-box { border:6px solid #fff; border-radius:8px; }
-                    .footer-banner { display:flex; justify-content:space-between; align-items:center; padding: 12px 4px; font-size: 9px; color: #64748b; border-top: 1px solid rgba(0,255,136,0.1); letter-spacing: 1.5px; text-transform: uppercase; }
-                    .footer-banner .dot { color:#00ff88; }
+                    body { background: radial-gradient(circle at top right, #0a192f 0%, #030814 60%); color: #e2e8f0; min-height: 100vh; padding: 24px 14px 40px; }
+                    a { text-decoration: none; color: inherit; }
+                    .up-wrap { max-width: 640px; margin: 0 auto; }
+                    .up-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; flex-wrap: wrap; gap: 14px; }
+                    .up-brand { display: flex; align-items: center; gap: 14px; }
+                    .up-logo { width: 58px; height: 58px; border-radius: 16px; background: radial-gradient(circle, #0a3325, #030814); border: 2px solid #00ff88; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; color: #00ff88; box-shadow: 0 0 16px rgba(0,255,136,0.5); }
+                    .up-title h1 { font-size: 22px; font-weight: 900; color: #fff; letter-spacing: 0.5px; }
+                    .up-title h1 span { color: #00ff88; }
+                    .up-title .sub { font-size: 11px; color: #94a3b8; letter-spacing: 3px; text-transform: uppercase; margin-top: 2px; }
+                    .up-title .tag { font-size: 10px; color: #00ff88; margin-top: 6px; letter-spacing: 1px; }
+                    .up-connect { text-align: center; }
+                    .up-connect .circle { width: 42px; height: 42px; border-radius: 50%; background: rgba(0,255,136,0.12); border: 1px solid #00ff88; display: flex; align-items: center; justify-content: center; margin: 0 auto 4px; }
+                    .up-connect .lbl { font-size: 9px; color: #94a3b8; }
+                    .up-contact-row { display: flex; align-items: center; gap: 14px; background: rgba(10,22,40,0.85); border: 1px solid rgba(0,255,136,0.2); border-radius: 12px; padding: 14px 16px; margin-bottom: 18px; flex-wrap: wrap; }
+                    .up-contact-item { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 200px; }
+                    .up-contact-item .ic { width: 32px; height: 32px; border-radius: 50%; background: rgba(0,255,136,0.12); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+                    .up-contact-item .lbl { font-size: 9px; color: #94a3b8; letter-spacing: 1px; text-transform: uppercase; }
+                    .up-contact-item .val { font-size: 13px; color: #fff; font-weight: 700; }
+                    .up-divider { width: 1px; align-self: stretch; background: rgba(0,255,136,0.15); }
+                    .up-card { background: rgba(10,22,40,0.85); border: 1px solid rgba(0,255,136,0.25); border-radius: 16px; padding: 20px; margin-bottom: 18px; position: relative; overflow: hidden; }
+                    .up-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+                    .up-card-head-left { display: flex; align-items: center; gap: 12px; }
+                    .up-card-head .ic { width: 40px; height: 40px; border-radius: 50%; background: rgba(0,255,136,0.12); border: 1px solid rgba(0,255,136,0.3); display: flex; align-items: center; justify-content: center; font-size: 17px; }
+                    .up-card-head h2 { font-size: 15px; color: #fff; font-weight: 800; }
+                    .up-card-head p { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+                    .up-wa-badge { width: 46px; height: 46px; border-radius: 50%; background: #00ff88; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px #00ff88; flex-shrink: 0; }
+                    .up-field { margin-bottom: 16px; }
+                    .up-field-label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: #fff; margin-bottom: 2px; }
+                    .up-field-sub { font-size: 10px; color: #94a3b8; margin-bottom: 8px; margin-left: 20px; }
+                    .up-select, .up-input-row { width: 100%; background: #030814; border: 1px solid rgba(0,255,136,0.3); border-radius: 10px; padding: 10px 12px; color: #fff; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+                    .up-select { appearance: none; cursor: pointer; }
+                    .up-input-row .flag { font-size: 15px; }
+                    .up-input-row .code { color: #94a3b8; font-size: 13px; border-right: 1px solid rgba(255,255,255,0.1); padding-right: 8px; }
+                    .up-input-row input { flex: 1; background: transparent; border: none; outline: none; color: #fff; font-size: 13px; }
+                    .up-btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+                    .up-btn { display: flex; align-items: center; gap: 10px; border-radius: 10px; padding: 12px 14px; cursor: pointer; border: 1px solid rgba(0,255,136,0.3); background: rgba(0,255,136,0.06); color: #fff; }
+                    .up-btn.solid { background: linear-gradient(135deg, #00ff88, #00acc1); color: #030814; border: none; }
+                    .up-btn .t { font-size: 12px; font-weight: 800; }
+                    .up-btn .s { font-size: 9px; opacity: 0.75; }
+                    .up-btn .chev { margin-left: auto; }
+                    .up-code-card { background: #030814; border: 1px dashed rgba(0,255,136,0.4); border-radius: 12px; padding: 14px; display: flex; align-items: center; gap: 12px; }
+                    .up-code-card .ic { width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(0,255,136,0.4); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+                    .up-code-card .txt { flex: 1; }
+                    .up-code-card .txt b { font-size: 12px; color: #fff; }
+                    .up-code-card .txt .s { font-size: 9px; color: #94a3b8; }
+                    #pairCodeBox { font-size: 14px; color: #00ff88; font-family: monospace; letter-spacing: 1px; margin-top: 6px; }
+                    #copyCodeBtn { background: transparent; border: 1px solid rgba(0,255,136,0.4); color: #00ff88; padding: 7px 12px; border-radius: 6px; font-size: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+                    .up-qr-wrap { display: none; flex-direction: column; align-items: center; margin-top: 14px; padding-top: 14px; border-top: 1px dashed rgba(0,255,136,0.2); }
+                    .up-board-card { background: rgba(10,22,40,0.85); border: 1px solid rgba(0,255,136,0.2); border-radius: 16px; padding: 18px 20px; margin-bottom: 18px; }
+                    .up-board-card h3 { font-size: 12px; color: #fff; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+                    .up-board-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 11px; }
+                    .up-board-row .up-ic { width: 22px; }
+                    .up-board-row .up-sub { color: #64748b; font-size: 9px; }
+                    .up-check { margin-left: auto; font-size: 15px; }
+                    .up-social-wrap { text-align: center; }
+                    .up-social-title { font-size: 10px; color: #00ff88; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; }
+                    .up-social-row { display: flex; justify-content: center; gap: 28px; flex-wrap: wrap; margin-bottom: 20px; }
+                    .up-social-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+                    .up-social-item .ic { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+                    .up-social-item .name { font-size: 10px; color: #fff; font-weight: 600; }
+                    .up-social-item .action { font-size: 9px; color: #00ff88; }
+                    .up-footer-dev { text-align: center; font-size: 10px; color: #64748b; }
+                    .up-footer-dev b { color: #00ff88; display: block; font-size: 12px; margin-top: 4px; }
                 </style>
             </head>
             <body>
-                <div class="sidebar">
-                    <div>
-                        <div class="brand"><span class="brand-icon">&#128081;</span> ${botSettings.botName}</div>
-                        <a href="/" class="menu-item active"><span class="menu-icon">&#128202;</span> Dashboard</a>
-                        <a href="/" class="menu-item"><span class="menu-icon">&#128241;</span> Pair / QR Code</a>
-                        <a href="/admin?page=sessions" class="menu-item"><span class="menu-icon">&#128421;</span> Sessions</a>
-                        <a href="/admin?page=groups" class="menu-item"><span class="menu-icon">&#128101;</span> Groups</a>
-                        <a href="/admin?page=settings" class="menu-item"><span class="menu-icon">&#9881;</span> Bot Settings</a>
-                        <a href="/admin?page=anti" class="menu-item"><span class="menu-icon">&#128737;</span> Anti Features</a>
-                        <a href="/admin?page=broadcast" class="menu-item"><span class="menu-icon">&#128227;</span> Broadcast</a>
-                        <a href="/admin?page=users" class="menu-item"><span class="menu-icon">&#128100;</span> Users</a>
-                        <a href="/admin?page=logs" class="menu-item"><span class="menu-icon">&#128203;</span> Logs</a>
-                        <a href="/admin?page=premium" class="menu-item"><span class="menu-icon">&#128142;</span> Premium</a>
-                        <a href="/admin?page=support" class="menu-item"><span class="menu-icon">&#127911;</span> Support</a>
-                        <a href="/admin?page=appearance" class="menu-item"><span class="menu-icon">&#127912;</span> Appearance</a>
-                    </div>
-                    <div class="side-footer">
-                        <div class="name">${botSettings.botName}</div>
-                        <div class="tag">ONLINE &middot; STABLE &middot; SECURE</div>
-                        <div class="pulse-bars"><span></span><span></span><span></span><span></span><span></span></div>
-                    </div>
-                </div>
-
-                <div class="main-content">
-                    <div class="topbar">
-                        <div class="topbar-left">
-                            <div class="logo-circle">
-                                <svg viewBox="0 0 24 24" width="24" height="24" stroke="#00ff88" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                            </div>
-                            <div class="topbar-title">
+                <div class="up-wrap">
+                    <div class="up-header">
+                        <div class="up-brand">
+                            <div class="up-logo">MM</div>
+                            <div class="up-title">
                                 <h1>${botSettings.botName}</h1>
-                                <p>Powered by technology, driven by trust</p>
-                                <span class="status-badge">&#9679; BOT ${botState.status} &nbsp;|&nbsp; Multi-Device</span>
+                                <div class="sub">WhatsApp Bot</div>
+                                <div class="tag">Simple &bull; Fast &bull; Secure</div>
                             </div>
                         </div>
-                        <div class="topbar-right">
-                            <div class="datetime"><b>${nowStr}</b>Local time</div>
-                            <div class="admin-chip">
-                                <div class="admin-avatar">&#128373;</div>
+                        <div class="up-connect">
+                            <div class="circle">&#128222;</div>
+                            <div class="lbl">Connect<br>Your World</div>
+                        </div>
+                    </div>
+
+                    <div class="up-contact-row">
+                        <div class="up-contact-item">
+                            <span class="ic">&#128222;</span>
+                            <div><div class="lbl">Owner Contact</div><div class="val">${ownerDisplay}</div></div>
+                        </div>
+                        <div class="up-divider"></div>
+                        <div class="up-contact-item">
+                            <span class="ic">&#128172;</span>
+                            <div><div class="lbl">Contact for Support</div><div class="val" style="font-size:11px;">Issues &middot; Help &middot; Queries</div></div>
+                        </div>
+                    </div>
+
+                    <div class="up-card">
+                        <div class="up-card-head">
+                            <div class="up-card-head-left">
+                                <span class="ic">&#128100;</span>
                                 <div>
-                                    <div class="name">${botSettings.ownerName}</div>
-                                    <div class="role">Administrator</div>
+                                    <h2>Pair Your WhatsApp</h2>
+                                    <p>Select a server, enter your number and get your code.</p>
                                 </div>
                             </div>
-                            <a href="/admin" class="admin-chip" style="color:#00ff88;font-size:11px;font-weight:700;">&#128272; Admin Panel</a>
+                            <div class="up-wa-badge">
+                                <svg viewBox="0 0 24 24" width="22" height="22" stroke="#030814" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                            </div>
+                        </div>
+
+                        <div class="up-field">
+                            <div class="up-field-label">&#128421; Select Server</div>
+                            <div class="up-field-sub">Choose an existing server or create a new one</div>
+                            <select class="up-select" id="serverSelect">${serverOptions}</select>
+                        </div>
+
+                        <div class="up-field">
+                            <div class="up-field-label">&#128241; WhatsApp Number</div>
+                            <div class="up-field-sub">Enter your number (e.g. 92xxxxxxxxxx)</div>
+                            <div class="up-input-row">
+                                <span class="flag">&#127477;&#127472;</span>
+                                <span class="code">+92</span>
+                                <input type="text" id="phoneNumber" placeholder="3xxxxxxxxx">
+                            </div>
+                        </div>
+
+                        <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:14px;font-size:9px;color:#94a3b8;cursor:pointer;">
+                            <input type="checkbox" id="agreeTerms" style="margin-top:2px;">
+                            <span>I agree to the security terms of this panel (admin can disconnect my board any time for abuse or spam).</span>
+                        </label>
+
+                        <div class="up-btn-row">
+                            <a href="#" id="qrBtn" class="up-btn">
+                                <span>&#9638;&#9638;</span>
+                                <span><div class="t">Get QR Code</div><div class="s">Scan with WhatsApp</div></span>
+                                <span class="chev">&#8250;</span>
+                            </a>
+                            <a href="#" id="pairBtn" class="up-btn solid">
+                                <span>&lt;/&gt;</span>
+                                <span><div class="t">Get Pairing Code</div><div class="s">Receive code to pair</div></span>
+                                <span class="chev">&#8250;</span>
+                            </a>
+                        </div>
+
+                        <div class="up-code-card">
+                            <span class="ic">&lt;/&gt;</span>
+                            <div class="txt">
+                                <b>Your Pairing Code</b>
+                                <div class="s">Copy this code and paste it in WhatsApp</div>
+                                <div id="pairCodeBox">CODE: ---</div>
+                            </div>
+                            <button id="copyCodeBtn" onclick="copyPairCode()" disabled>&#128203; Copy</button>
+                        </div>
+
+                        <div class="up-qr-wrap" id="qrWrap">
+                            <div class="up-field-label" style="margin-bottom:8px;">Scan this QR Code</div>
+                            ${qrDisplay}
                         </div>
                     </div>
 
-                    <div class="stats-row">
-                        <div class="stat-box">
-                            <div class="stat-header"><span class="stat-icon">&#128101;</span> Total Users</div>
-                            <div class="stat-value">${dRealUsers}</div>
-                            <div class="stat-sub">&#8593; ${dRealOnline} online now</div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="stat-header"><span class="stat-icon">&#129302;</span> Active Bots</div>
-                            <div class="stat-value">${countOnlineSessions()}</div>
-                            <div class="stat-sub">&#8593; ${botState.status === 'ONLINE' ? 'Fully Active' : 'Offline'}</div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="stat-header"><span class="stat-icon">&#128194;</span> Total Groups</div>
-                            <div class="stat-value">${dRealGroups}</div>
-                            <div class="stat-sub">&#8593; Live from WhatsApp</div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="stat-header"><span class="stat-icon">&#128172;</span> Messages Sent</div>
-                            <div class="stat-value">${dRealMessages}</div>
-                            <div class="stat-sub">&#8593; Since portal started</div>
-                        </div>
+                    <div class="up-board-card">
+                        <h3>Connected Boards (${boards.length})</h3>
+                        ${boardsListHtml}
                     </div>
 
-                    <div class="grid-mid">
-                        <div class="card">
-                            <div class="card-title">Bot Status <span class="muted">&#9679; ${botState.status}</span></div>
-                            <div class="radar-container">
-                                <div class="radar-ring"></div>
-                                <div class="radar-ring"></div>
-                                <div class="whatsapp-icon">
-                                    <svg viewBox="0 0 24 24" width="22" height="22" stroke="#030814" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                                </div>
-                            </div>
-                            <div style="text-align:center;"><span class="status-online-pill">&#9679; ${botState.status}</span></div>
-                            <div class="info-row"><span>Uptime</span><b>${uptimeStr}</b></div>
-                            <div class="info-row"><span>RAM Usage</span><b>${usedMemMB} MB / ${totalMemGB} GB</b></div>
-                            <div class="info-row"><span>&nbsp;</span><div class="mini-bar"><span style="width:${ramPercent}%;"></span></div></div>
-                            <div class="info-row"><span>CPU Usage</span><b>${cpuPercent}%</b></div>
-                            <div class="info-row"><span>Platform</span><b>${process.version}</b></div>
-                            <div class="info-row" style="border-bottom:none;"><span>Mode</span><b>Multi-Device</b></div>
-                            <div class="term-box">&gt; whatsapp connection established...<br>&gt; bot is running smoothly</div>
+                    <div class="up-social-wrap">
+                        <div class="up-social-title">Join Our Channels</div>
+                        <div class="up-social-row">
+                            <a class="up-social-item" href="${botSettings.socialYoutube || '#'}" target="_blank">
+                                <span class="ic" style="background:rgba(239,68,68,0.15);color:#ef4444;">&#9654;</span>
+                                <span class="name">YouTube</span><span class="action">Subscribe</span>
+                            </a>
+                            <a class="up-social-item" href="${botSettings.socialInstagram || '#'}" target="_blank">
+                                <span class="ic" style="background:rgba(236,72,153,0.15);color:#ec4899;">&#128248;</span>
+                                <span class="name">Instagram</span><span class="action">Follow</span>
+                            </a>
+                            <a class="up-social-item" href="${waChannelLink}" target="_blank">
+                                <span class="ic" style="background:rgba(0,255,136,0.15);color:#00ff88;">&#128222;</span>
+                                <span class="name">WhatsApp Channel</span><span class="action">Join</span>
+                            </a>
+                            <a class="up-social-item" href="${botSettings.socialTelegram || '#'}" target="_blank">
+                                <span class="ic" style="background:rgba(56,189,248,0.15);color:#38bdf8;">&#9992;</span>
+                                <span class="name">Telegram</span><span class="action">Join</span>
+                            </a>
                         </div>
-
-                        <div class="card">
-                            <div class="card-title">System Usage <span class="legend"><b>&#9679;</b> CPU <span class="r">&#9679;</span> RAM</span></div>
-                            <div class="tabs" style="display:flex;gap:6px;margin-bottom:8px;">
-                                <div class="tab active" style="font-size:9px;padding:3px 10px;border-radius:6px;background:rgba(0,255,136,0.12);color:#00ff88;border:1px solid rgba(0,255,136,0.3);">CPU</div>
-                                <div class="tab" style="font-size:9px;padding:3px 10px;border-radius:6px;color:#94a3b8;border:1px solid rgba(255,255,255,0.06);">RAM</div>
-                            </div>
-                            <div class="chart-wrap" style="position:relative;height:130px;">
-                                <svg viewBox="0 0 300 130" width="100%" height="130" preserveAspectRatio="none">
-                                    <polyline points="0,90 30,70 60,85 90,50 120,65 150,30 180,55 210,40 240,60 270,35 300,50" fill="none" stroke="#00ff88" stroke-width="2"/>
-                                    <polygon points="0,90 30,70 60,85 90,50 120,65 150,30 180,55 210,40 240,60 270,35 300,50 300,130 0,130" fill="#00ff88" opacity="0.08"/>
-                                </svg>
-                            </div>
-                            <div class="mini-stats-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
-                                <div class="mini-stat" style="background:rgba(255,255,255,0.02);border-radius:8px;padding:8px 10px;"><div class="lbl" style="font-size:9px;color:#94a3b8;">Network</div><div class="val" style="font-size:12px;color:#fff;font-weight:700;">4.2 KB/s</div></div>
-                                <div class="mini-stat" style="background:rgba(255,255,255,0.02);border-radius:8px;padding:8px 10px;"><div class="lbl" style="font-size:9px;color:#94a3b8;">Events</div><div class="val" style="font-size:12px;color:#fff;font-weight:700;">128 / min</div></div>
-                            </div>
-                        </div>
-
-                        <div class="card profile-card">
-                            <div class="avatar-circle">&#128081;</div>
-                            <div style="font-size:13px;font-weight:900;color:#fff;">${botSettings.botName}</div>
-                            <div style="font-size:8px;color:#94a3b8;font-style:italic;margin-top:4px;">"Building bots, building trust"</div>
-                            <div class="antifeat-banner">
-                                <div class="shield">&#128737;</div>
-                                <div><div style="font-size:10px;font-weight:700;color:#00ff88;">ANTI-LINK / ANTI-DELETE</div><div style="font-size:8px;color:#94a3b8;">${botSettings.antilink ? 'Antilink ON' : 'Antilink OFF'} &middot; ${botSettings.antidelete ? 'Antidelete ON' : 'Antidelete OFF'}</div></div>
-                            </div>
-                            <div style="font-size:8px;color:#64748b;margin-top:10px;">&#128081; Developed by ${botSettings.ownerName}</div>
-                        </div>
-                    </div>
-
-                    <div class="grid-bottom">
-                        <div class="card">
-                            <div class="card-title">Recent Activity <span class="muted">Live system log</span></div>
-                            ${systemLogs.slice(0, 4).map(l => `<div class="list-item"><span class="ic">&#128172;</span><span class="txt"><b>${l.action}</b></span><span class="time">${l.time}</span></div>`).join('')}
-                        </div>
-
-                        <div class="card">
-                            <div class="card-title">Bot Configuration <span class="muted">Live</span></div>
-                            <div class="info-row"><span>Prefix</span><b>${botSettings.prefix}</b></div>
-                            <div class="info-row"><span>Mode</span><b>${botSettings.mode}</b></div>
-                            <div class="info-row"><span>Welcome messages</span><b>${botSettings.welcomeEnabled ? 'ON' : 'OFF'}</b></div>
-                            <div class="info-row" style="border-bottom:none;"><span>Goodbye messages</span><b>${botSettings.goodbyeEnabled ? 'ON' : 'OFF'}</b></div>
-                        </div>
-
-                        <div class="card">
-                            <div class="card-title">Session Health <span class="muted">${Object.keys(sessions).length} board(s)</span></div>
-                            ${Object.keys(sessions).length === 0
-                                ? `<div class="session-row"><span class="ic">&#128241;</span><span><b>No boards yet</b><div class="sub">Pair one below</div></span></div>`
-                                : listSessions().map(b => `<div class="session-row"><span class="ic">&#128241;</span><span><b>${b.connectedNumber}</b><div class="sub">${b.status}</div></span><a href="/api/logout-session?id=${encodeURIComponent(b.id)}" class="check" style="color:${b.status === 'ONLINE' ? '#00ff88' : '#f87171'};text-decoration:none;" title="Logout this board" onclick="return confirm('Log out this board?');">${b.status === 'ONLINE' ? '&#10003;' : '&#10005;'}</a></div>`).join('')
-                            }
-                        </div>
-                    </div>
-
-                        <div class="card qr-card">
-                            <div class="card-title" style="width:100%;">Scan QR Code <a href="/refresh-qr" style="font-size:9px;color:#00ff88;">[Reset]</a></div>
-                            <div class="qr-box">${qrDisplay}</div>
-                            <div style="font-size:9px;color:#94a3b8;margin-top:8px;">Connect new device</div>
-                            <div style="width:100%;margin-top:14px;">
-                                <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">Pair via phone number:</div>
-                                <div style="display:flex;gap:6px;">
-                                    <input type="text" id="phoneNumber" placeholder="+923204854766" style="flex:1;background:#030814;border:1px solid rgba(0,255,136,0.3);padding:7px 10px;border-radius:6px;color:#fff;font-size:11px;outline:none;">
-                                    <button onclick="getPairingCode()" style="background:linear-gradient(135deg,#00ff88,#00acc1);color:#030814;border:none;padding:7px 12px;border-radius:6px;font-weight:800;font-size:10px;cursor:pointer;">Get code</button>
-                                </div>
-                                <label style="display:flex;gap:6px;align-items:flex-start;margin-top:8px;font-size:9px;color:#94a3b8;cursor:pointer;">
-                                    <input type="checkbox" id="agreeTerms" style="margin-top:2px;">
-                                    <span>I agree that by connecting my board here, I must follow this panel's security rules (no abuse, no spam, admin can disconnect my board any time).</span>
-                                </label>
-                                <div style="display:flex;gap:6px;margin-top:8px;align-items:center;">
-                                    <div id="pairCodeBox" style="flex:1;font-size:11px;color:#00ff88;font-family:monospace;text-align:center;background:#030814;padding:6px;border-radius:4px;border:1px dashed #00ff88;">CODE: ---</div>
-                                    <button id="copyCodeBtn" onclick="copyPairCode()" style="background:transparent;border:1px solid rgba(0,255,136,0.4);color:#00ff88;padding:6px 10px;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;" disabled>&#128203; Copy</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="footer-banner">
-                        <span>"${botSettings.botName}" &middot; POWERED BY TECHNOLOGY, DRIVEN BY TRUST</span>
-                        <span class="dot">&#9679;</span> <span>System online</span>
+                        <div class="up-footer-dev">Developed by<b>${botSettings.ownerName}</b></div>
                     </div>
                 </div>
 
                 <script>
-                    setTimeout(() => { location.reload(); }, 20000);
                     let lastPairCode = '';
-                    async function getPairingCode() {
+
+                    document.getElementById('qrBtn').addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const sel = document.getElementById('serverSelect').value;
+                        window.location.href = '/refresh-qr?id=' + encodeURIComponent(sel);
+                    });
+
+                    document.getElementById('pairBtn').addEventListener('click', async function(e) {
+                        e.preventDefault();
+                        const sel = document.getElementById('serverSelect').value;
                         const num = document.getElementById('phoneNumber').value.trim();
                         const agree = document.getElementById('agreeTerms').checked;
                         const box = document.getElementById('pairCodeBox');
                         const copyBtn = document.getElementById('copyCodeBtn');
-                        if(!num) { alert('Please enter phone number!'); return; }
-                        if(!agree) { alert('Please tick the security terms checkbox before connecting a board.'); return; }
+                        if (!num) { alert('Please enter your WhatsApp number!'); return; }
+                        if (!agree) { alert('Please tick the security terms checkbox before connecting a board.'); return; }
+                        const fullNumber = '92' + num.replace(/[^0-9]/g, '').replace(/^0+/, '');
                         box.innerText = 'REQUESTING...';
                         copyBtn.disabled = true;
                         try {
-                            const res = await fetch('/get-pairing-code?number=' + encodeURIComponent(num) + '&agree=1');
+                            const res = await fetch('/get-pairing-code?number=' + encodeURIComponent(fullNumber) + '&sessionId=' + encodeURIComponent(sel) + '&agree=1');
                             const data = await res.json();
-                            if(data.code) {
+                            if (data.code) {
                                 lastPairCode = data.code;
                                 box.innerText = 'CODE: ' + data.code;
                                 copyBtn.disabled = false;
@@ -1099,12 +1073,13 @@ const server = http.createServer(async (req, res) => {
                             } else {
                                 box.innerText = 'ERROR: ' + (data.message || data.error || 'Failed');
                             }
-                        } catch(e) { box.innerText = 'CONNECTION ERROR'; }
-                    }
+                        } catch (e) { box.innerText = 'CONNECTION ERROR'; }
+                    });
+
                     function copyPairCode() {
                         if (!lastPairCode) return;
                         const copyBtn = document.getElementById('copyCodeBtn');
-                        const finish = (ok) => { copyBtn.innerText = ok ? '\u2705 Copied' : '\u274c Failed'; setTimeout(() => { copyBtn.innerHTML = '&#128203; Copy'; }, 1500); };
+                        const finish = (ok) => { copyBtn.innerText = ok ? '\\u2705 Copied' : '\\u274c Failed'; setTimeout(() => { copyBtn.innerHTML = '&#128203; Copy'; }, 1500); };
                         if (navigator.clipboard && navigator.clipboard.writeText) {
                             navigator.clipboard.writeText(lastPairCode).then(() => finish(true)).catch(() => finish(false));
                         } else {
@@ -1116,14 +1091,16 @@ const server = http.createServer(async (req, res) => {
                                 document.execCommand('copy');
                                 document.body.removeChild(ta);
                                 finish(true);
-                            } catch(e) { finish(false); }
+                            } catch (e) { finish(false); }
                         }
                     }
+
+                    ${botState.qrString ? "document.getElementById('qrWrap').style.display = 'flex'; setTimeout(() => { location.reload(); }, 20000);" : ''}
                 </script>
             </body>
             </html>
         `;
-        res.end(applyTheme(__dashboardHtml));
+        res.end(applyTheme(__userPanelHtml));
     }
 
     // ─── ADMIN CONTROL PANEL (SECURE, MULTI-PAGE) ───
