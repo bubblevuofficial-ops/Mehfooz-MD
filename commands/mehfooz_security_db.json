@@ -1,0 +1,158 @@
+{
+  "chats": {
+    "120363429115137146@g.us": {
+      "f": {
+        "antivice": {
+          "on": true,
+          "action": "delete"
+        },
+        "antirecording": {
+          "on": false,
+          "action": "delete"
+        },
+        "antisticker": {
+          "on": false,
+          "action": "warn"
+        },
+        "antigif": {
+          "on": true,
+          "action": "delete"
+        },
+        "antiemoji": {
+          "on": false,
+          "action": "delete"
+        },
+        "antivideo": {
+          "on": true,
+          "action": "delete"
+        },
+        "antilink": {
+          "on": false,
+          "action": "kick"
+        },
+        "antimap": {
+          "on": true,
+          "action": "delete"
+        },
+        "antilocation": {
+          "on": true,
+          "action": "delete"
+        },
+        "anticontact": {
+          "on": true,
+          "action": "delete"
+        },
+        "antiimage": {
+          "on": false,
+          "action": "delete"
+        },
+        "antispam": {
+          "on": true,
+          "action": "delete"
+        }
+      },
+      "words": [
+        "on"
+      ],
+      "warns": {
+        "923264236939": 2
+      },
+      "fakePrefixes": [
+        "92"
+      ]
+    },
+    "120363425365444871@g.us": {
+      "f": {},
+      "words": [],
+      "warns": {},
+      "fakePrefixes": [
+        "92"
+      ]
+    },
+    "120363430122351264@g.us": {
+      "f": {},
+      "words": [],
+      "warns": {},
+      "fakePrefixes": [
+        "92"
+      ]
+    },
+    "120363428135403654@g.us": {
+      "f": {
+        "antirecording": {
+          "on": false,
+          "action": "delete"
+        },
+        "antisticker": {
+          "on": false,
+          "action": "delete"
+        },
+        "antiemoji": {
+          "on": false,
+          "action": "delete"
+        },
+        "antigif": {
+          "on": true,
+          "action": "delete"
+        },
+        "antiimage": {
+          "on": false,
+          "action": "delete"
+        },
+        "antivideo": {
+          "on": false,
+          "action": "delete"
+        }
+      },
+      "words": [],
+      "warns": {},
+      "fakePrefixes": [
+        "92"
+      ]
+    },
+    "120363428573843970@g.us": {
+      "f": {},
+      "words": [],
+      "warns": {},
+      "fakePrefixes": [
+        "92"
+      ]
+    },
+    "120363429359979598@g.us": {
+      "f": {},
+      "words": [],
+      "warns": {},
+      "fakePrefixes": [
+        "92"
+      ]
+    },
+    "120363429055920154@g.us": {
+      "f": {},
+      "words": [],
+      "warns": {},
+      "fakePrefixes": [
+        "92"
+      ]
+    }
+  },
+  "global": {
+    "antiedit": {
+      "on": true,
+      "target": "group"
+    },
+    "antidelete": {
+      "on": true,
+      "target": "inbox"
+    },
+    "antiinbox": {
+      "on": true
+    }
+  },
+  "banned": [
+    {
+      "num": "79694007373994",
+      "action": "delete",
+      "warns": 0
+    }
+  ]
+}
