@@ -1828,4 +1828,5 @@ function startSession(existingId, existingDir) {
         });
     } catch (e) {}
     if (restored === 0) startSession();
+    module.exports=app;
 })();
