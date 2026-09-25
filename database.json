@@ -1,0 +1,631 @@
+{
+  "COMMAND_CATALOG": {
+    "Group Management": [
+      [
+        "lock",
+        "Group settings ko announcement only par set karta hai"
+      ],
+      [
+        "unlock",
+        "Group settings ko open karta hai"
+      ],
+      [
+        "kick",
+        "Kisi member ko group se nikalne ke liye"
+      ],
+      [
+        "add",
+        "Kisi number ko group mein add karne ke liye"
+      ],
+      [
+        "promote",
+        "Member ko admin banane ke liye"
+      ],
+      [
+        "demote",
+        "Admin ko member banane ke liye"
+      ],
+      [
+        "tagall",
+        "Group ke sab members ko mention karne ke liye"
+      ],
+      [
+        "hidetag",
+        "Sab members ko mention karta hai bina text show kiye"
+      ],
+      [
+        "groupinfo",
+        "Group ki details show karta hai"
+      ],
+      [
+        "link",
+        "Group ka invite link deta hai"
+      ],
+      [
+        "revoke",
+        "Group link ko reset karta hai"
+      ],
+      [
+        "setname",
+        "Group ka naam change karne ke liye"
+      ],
+      [
+        "setdesc",
+        "Group ki description change karne ke liye"
+      ],
+      [
+        "setpp",
+        "Group ki profile picture change karne ke liye"
+      ],
+      [
+        "leave",
+        "Bot ko group se nikalne ke liye"
+      ],
+      [
+        "admins",
+        "Group ke admins ki list dikhata hai"
+      ],
+      [
+        "ephemeral",
+        "Disappearing messages on/off karta hai"
+      ],
+      [
+        "mute",
+        "Group ko mute karne ke liye (bot response stop)"
+      ],
+      [
+        "unmute",
+        "Bot response dobara start karne ke liye"
+      ],
+      [
+        "welcome",
+        "Welcome message on/off karne ke liye"
+      ],
+      [
+        "goodbye",
+        "Goodbye message on/off karne ke liye"
+      ],
+      [
+        "setwelcome",
+        "Custom welcome message set karne ke liye"
+      ],
+      [
+        "setgoodbye",
+        "Custom goodbye message set karne ke liye"
+      ],
+      [
+        "group",
+        "Group settings (open/close) ka shortcut"
+      ],
+      [
+        "poll",
+        "Group mein poll create karne ke liye"
+      ],
+      [
+        "warn",
+        "Member ko warn karne ke liye"
+      ],
+      [
+        "resetwarn",
+        "Kisi member ki warnings zero karne ke liye"
+      ],
+      [
+        "listwarn",
+        "Warned members ki list dekhne ke liye"
+      ],
+      [
+        "banned",
+        "Banned members ki list"
+      ],
+      [
+        "ping",
+        "Bot ki speed check karne ke liye"
+      ]
+    ],
+    "Security & Anti-Link": [
+      [
+        "antilink",
+        "WhatsApp links ko auto-delete aur kick karne ke liye"
+      ],
+      [
+        "antidelete",
+        "Delete kiye gaye messages ko wapas dikhane ke liye"
+      ],
+      [
+        "antiviewonce",
+        "View-once photos ko save karne ke liye"
+      ],
+      [
+        "antibot",
+        "Dusre bots ko group se nikalne ke liye"
+      ],
+      [
+        "antispam",
+        "Spamming rokne ke liye"
+      ],
+      [
+        "anticall",
+        "Bot number par calls block karne ke liye"
+      ],
+      [
+        "antifake",
+        "Fake numbers (+1, etc.) ko auto-kick karne ke liye"
+      ],
+      [
+        "antitoxic",
+        "Gali galoch par auto-kick/warn"
+      ],
+      [
+        "autosticker",
+        "Har photo ko sticker mein badalne ke liye"
+      ],
+      [
+        "autoread",
+        "Messages ko auto-blue tick karne ke liye"
+      ],
+      [
+        "autorespond",
+        "AI based auto replies on/off"
+      ],
+      [
+        "nsfw",
+        "Adult content filter on/off"
+      ],
+      [
+        "security",
+        "Group ki overall security settings check karein"
+      ],
+      [
+        "lockall",
+        "Group ki har cheez (name, icon, desc) lock kar dena"
+      ],
+      [
+        "unlockall",
+        "Group ki settings open kar dena"
+      ],
+      [
+        "kickall",
+        "Sab members ko kick karne ke liye"
+      ],
+      [
+        "ban",
+        "User ko bot use karne se ban karne ke liye"
+      ],
+      [
+        "unban",
+        "User ko unban karne ke liye"
+      ],
+      [
+        "block",
+        "Number ko block karne ke liye"
+      ],
+      [
+        "unblock",
+        "Number ko unblock karne ke liye"
+      ]
+    ],
+    "Tools & Utility": [
+      [
+        "sticker",
+        "Photo/video ko sticker mein badalne ke liye"
+      ],
+      [
+        "toimg",
+        "Sticker ko photo mein badalne ke liye"
+      ],
+      [
+        "tovideo",
+        "Sticker ko video mein badalne ke liye"
+      ],
+      [
+        "tomp3",
+        "Video ko audio mein badalne ke liye"
+      ],
+      [
+        "tovn",
+        "Audio ko voice note mein badalne ke liye"
+      ],
+      [
+        "ocr",
+        "Image se text nikalne ke liye"
+      ],
+      [
+        "translate",
+        "Text ko dusri language mein badalne ke liye"
+      ],
+      [
+        "tts",
+        "Text ko voice mein badalne ke liye"
+      ],
+      [
+        "shortlink",
+        "Lambay URL ko chota karne ke liye"
+      ],
+      [
+        "calc",
+        "Math calculations karne ke liye"
+      ],
+      [
+        "weather",
+        "Kisi bhi shehar ka mausam check karne ke liye"
+      ],
+      [
+        "reminder",
+        "Reminder set karne ke liye"
+      ],
+      [
+        "notes",
+        "Personal notes save karne ke liye"
+      ],
+      [
+        "listnotes",
+        "Saved notes dekhne ke liye"
+      ],
+      [
+        "delnote",
+        "Note delete karne ke liye"
+      ],
+      [
+        "qr",
+        "Text se QR code banane ke liye"
+      ],
+      [
+        "readqr",
+        "QR code image se data nikalne ke liye"
+      ],
+      [
+        "ss",
+        "Website ka screenshot lene ke liye"
+      ],
+      [
+        "pdf",
+        "Website ya text ko PDF mein badalne ke liye"
+      ],
+      [
+        "info",
+        "Bot ki system information"
+      ],
+      [
+        "runtime",
+        "Bot kitni der se chal raha hai"
+      ],
+      [
+        "speed",
+        "Internet speed test"
+      ],
+      [
+        "cpu",
+        "Server CPU usage check karein"
+      ],
+      [
+        "ram",
+        "Server RAM usage check karein"
+      ],
+      [
+        "temp",
+        "Server temperature"
+      ],
+      [
+        "whois",
+        "Domain details check karne ke liye"
+      ],
+      [
+        "ipinfo",
+        "IP address ki details"
+      ],
+      [
+        "base64",
+        "Encode/Decode text"
+      ],
+      [
+        "binary",
+        "Text to binary conversion"
+      ],
+      [
+        "hex",
+        "Text to hex conversion"
+      ]
+    ],
+    "Downloaders": [
+      [
+        "ytmp3",
+        "YouTube video ko MP3 mein download karein"
+      ],
+      [
+        "ytmp4",
+        "YouTube video ko MP4 mein download karein"
+      ],
+      [
+        "facebook",
+        "FB video download karne ke liye"
+      ],
+      [
+        "instagram",
+        "Insta reels/post download karne ke liye"
+      ],
+      [
+        "tiktok",
+        "TikTok video (without watermark) download karein"
+      ],
+      [
+        "twitter",
+        "Twitter video download"
+      ],
+      [
+        "threads",
+        "Threads post download"
+      ],
+      [
+        "pinterest",
+        "Pinterest image/video download"
+      ],
+      [
+        "gdrive",
+        "Google Drive file download"
+      ],
+      [
+        "mediafire",
+        "Mediafire file download"
+      ],
+      [
+        "gitclone",
+        "GitHub repository download"
+      ],
+      [
+        "play",
+        "YouTube se gaana search aur download karein"
+      ],
+      [
+        "song",
+        "Audio file search"
+      ],
+      [
+        "video",
+        "Video file search"
+      ],
+      [
+        "apk",
+        "Android app download link"
+      ],
+      [
+        "modapk",
+        "Modded apps search"
+      ],
+      [
+        "story",
+        "Insta story download"
+      ],
+      [
+        "capcut",
+        "Capcut template download"
+      ],
+      [
+        "snapchat",
+        "Snapchat video download"
+      ],
+      [
+        "spotify",
+        "Spotify track download"
+      ]
+    ],
+    "Search & Information": [
+      [
+        "google",
+        "Google search results"
+      ],
+      [
+        "wiki",
+        "Wikipedia information"
+      ],
+      [
+        "lyrics",
+        "Gaane ke bol (lyrics) search karein"
+      ],
+      [
+        "image",
+        "Google image search"
+      ],
+      [
+        "wallpaper",
+        "HD wallpapers search"
+      ],
+      [
+        "news",
+        "Latest news updates"
+      ],
+      [
+        "cricket",
+        "Live cricket score"
+      ],
+      [
+        "stock",
+        "Stock market updates"
+      ],
+      [
+        "crypto",
+        "Bitcoin/Crypto prices"
+      ],
+      [
+        "dictionary",
+        "Word meanings"
+      ],
+      [
+        "urban",
+        "Urban dictionary slang meanings"
+      ],
+      [
+        "imdb",
+        "Movie ratings aur details"
+      ],
+      [
+        "anime",
+        "Anime information search"
+      ],
+      [
+        "manga",
+        "Manga details"
+      ],
+      [
+        "github",
+        "GitHub user profile search"
+      ],
+      [
+        "npm",
+        "NPM package details"
+      ],
+      [
+        "playstore",
+        "App details from Play Store"
+      ],
+      [
+        "map",
+        "Location map search"
+      ],
+      [
+        "recipe",
+        "Khana banane ki tarkeeb search karein"
+      ],
+      [
+        "horoscope",
+        "Daily horoscope"
+      ]
+    ],
+    "Study & VU Specific": [
+      [
+        "handouts",
+        "VU subject handouts download karein"
+      ],
+      [
+        "pastpapers",
+        "Moaaz/Waqar Sidhu files search"
+      ],
+      [
+        "lms",
+        "LMS login link aur guide"
+      ],
+      [
+        "datesheet",
+        "Datesheet portal link"
+      ],
+      [
+        "result",
+        "Result checking guide"
+      ],
+      [
+        "admission",
+        "New admission details"
+      ],
+      [
+        "fees",
+        "Fee structure information"
+      ],
+      [
+        "cs101",
+        "CS101 specific resources"
+      ],
+      [
+        "mth101",
+        "MTH101 specific resources"
+      ],
+      [
+        "eng101",
+        "ENG101 specific resources"
+      ],
+      [
+        "assignment",
+        "Latest assignment solutions"
+      ],
+      [
+        "gdb",
+        "GDB discussion help"
+      ],
+      [
+        "quiz",
+        "Quiz preparation files"
+      ],
+      [
+        "vucalendar",
+        "Academic calendar"
+      ],
+      [
+        "scholarship",
+        "VU scholarship details"
+      ],
+      [
+        "degree",
+        "Degree issuance process"
+      ],
+      [
+        "transcript",
+        "Transcript request guide"
+      ],
+      [
+        "campus",
+        "VU campuses list"
+      ],
+      [
+        "contact",
+        "VU official contact details"
+      ],
+      [
+        "helpvu",
+        "General VU support"
+      ]
+    ],
+    "Owner & Admin": [
+      [
+        "broadcast",
+        "Sab chats mein message bhejne ke liye"
+      ],
+      [
+        "setprefix",
+        "Bot ka prefix change karein"
+      ],
+      [
+        "setbotname",
+        "Bot ka naam badalne ke liye"
+      ],
+      [
+        "setowner",
+        "Owner number update karein"
+      ],
+      [
+        "eval",
+        "JavaScript code execute karne ke liye"
+      ],
+      [
+        "shell",
+        "Terminal commands run karne ke liye"
+      ],
+      [
+        "restart",
+        "Bot ko restart karne ke liye"
+      ],
+      [
+        "shutdown",
+        "Bot ko band karne ke liye"
+      ],
+      [
+        "update",
+        "GitHub se latest code pull karein"
+      ],
+      [
+        "clearall",
+        "Sab chats clear karne ke liye"
+      ]
+    ]
+  },
+  "sudo": [
+    "120332887310381"
+  ],
+  "owners": [],
+  "mode": "private",
+  "botName": "saif",
+  "premium": [],
+  "banned": [],
+  "blocked": [],
+  "tables": {
+    "notes": []
+  },
+  "backups": []
+}
