@@ -546,6 +546,14 @@ const server = http.createServer(async (req, res) => {
     const pathname = parsedUrl.pathname;
     const query = parsedUrl.query;
 
+    // ─── CORS: let a separate front-end (e.g. a Vercel-hosted server
+    // directory page) call this app's pairing endpoints directly from
+    // the browser, without needing to redirect the user here first. ───
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
     const sendJson = (data) => {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.end(JSON.stringify(data));
@@ -798,6 +806,20 @@ const server = http.createServer(async (req, res) => {
     // ─── LIVE LIST OF ALL CONNECTED BOARDS (used by dashboard + admin) ───
     if (pathname === '/api/sessions') {
         return sendJson({ sessions: listSessions(), onlineCount: countOnlineSessions() });
+    }
+
+    // ─── PUBLIC INFO (safe, non-sensitive fields only) — used by external
+    // pages like the Vercel server directory to show live branding/links
+    // without exposing admin data. ───
+    if (pathname === '/api/public-info') {
+        return sendJson({
+            botName: botSettings.botName,
+            ownerNumber: botSettings.ownerNumber,
+            socialYoutube: botSettings.socialYoutube || '',
+            socialInstagram: botSettings.socialInstagram || '',
+            socialTelegram: botSettings.socialTelegram || '',
+            channelLink: (botSettings.channelLinks && botSettings.channelLinks[0]) || ''
+        });
     }
 
     // ─── LOG OUT ONE BOARD ONLY — every other connected board stays untouched ───
