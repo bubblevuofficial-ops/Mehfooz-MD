@@ -1,3 +1,5 @@
 [
-  { "name": "Server 1", "url": "https://mehfooz.herokuapp.com" }
+  { "name": "Server 1", "url": "https://mehfooz-89e0fa8d53fe.herokuapp.com" }
+  { "name": "Server 2", "url": "https://mehfooz2-3e50890a3a4a.herokuapp.com" }
+  { "name": "Server 3", "url": "https://mehfooz-89e0fa8d53fe.herokuapp.com" }
 ]
